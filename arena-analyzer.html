@@ -1,0 +1,874 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arena Matchup Analyzer</title>
+<style>
+:root {
+  --bg: #f6f7f9; --card: #ffffff; --text: #1b1f24; --muted: #5f6b7a; --border: #d9dee5;
+  --accent: #3b6fd8; --win: #1f8a4c; --loss: #c43d3d; --mid: #b7861a; --input: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171c; --card: #1d2128; --text: #e6e9ee; --muted: #9aa5b4; --border: #313844;
+    --accent: #6e9bff; --win: #43c07a; --loss: #f06b6b; --mid: #e0b040; --input: #252a33;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 980px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 22px; margin: 4px 0 2px; }
+.sub { color: var(--muted); margin: 0 0 16px; }
+nav { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+nav button { background: var(--card); color: var(--text); border: 1px solid var(--border); padding: 8px 14px; border-radius: 8px; cursor: pointer; font: inherit; }
+nav button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+.card h2 { font-size: 16px; margin: 0 0 10px; }
+.teams { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 640px) { .teams { grid-template-columns: 1fr; } }
+.team > label { display: block; font-weight: 600; margin-bottom: 6px; }
+.slot { display: grid; grid-template-columns: 1fr 110px; gap: 6px; }
+input, select, textarea { width: 100%; padding: 7px 9px; margin-bottom: 6px; border: 1px solid var(--border); border-radius: 7px; background: var(--input); color: var(--text); font: inherit; }
+textarea { min-height: 260px; }
+.total { font-weight: 600; }
+.total small { font-weight: 400; color: var(--muted); }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin-top: 8px; }
+.row > div { flex: 1 1 140px; }
+.row label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 3px; }
+.btn { background: var(--accent); color: #fff; border: 0; padding: 9px 16px; border-radius: 8px; cursor: pointer; font: inherit; font-weight: 600; }
+.btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.btn.win { background: var(--win); } .btn.loss { background: var(--loss); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.big { font-size: 44px; font-weight: 700; line-height: 1; }
+.meter { height: 10px; background: var(--border); border-radius: 5px; overflow: hidden; margin: 10px 0; }
+.meter > span { display: block; height: 100%; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+.tablewrap { overflow-x: auto; }
+.w { color: var(--win); font-weight: 600; } .l { color: var(--loss); font-weight: 600; }
+.muted { color: var(--muted); }
+.hidden { display: none; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+.x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 16px; }
+.formula { font-family: ui-monospace, Consolas, monospace; font-size: 13px; background: var(--bg); border-radius: 8px; padding: 10px; overflow-x: auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Arena Matchup Analyzer</h1>
+  <p class="sub">Log your arena fights, then check your win chance against an enemy team. Everything stays in this browser on your PC.</p>
+
+  <nav>
+    <button data-tab="analyze" class="active">Analyze</button>
+    <button data-tab="roster">My heroes</button>
+    <button data-tab="log">Log battle</button>
+    <button data-tab="history">History</button>
+    <button data-tab="heroes">Hero stats</button>
+    <button data-tab="counters">Counters</button>
+    <button data-tab="list">Hero list</button>
+    <button data-tab="data">Backup</button>
+  </nav>
+
+  <!-- ANALYZE -->
+  <section id="tab-analyze">
+    <div class="card">
+      <h2>Matchup</h2>
+      <div class="teams">
+        <div class="team" id="a-enemy" data-label="Enemy team"></div>
+        <div class="team" id="a-mine" data-label="My team (optional — suggestions come from My heroes)" data-mine="1"></div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="a-run">Analyze</button>
+        <button class="btn ghost" id="a-tolog">Send to Log battle</button>
+        <button class="btn ghost" id="a-clear">Clear</button>
+      </div>
+    </div>
+    <div id="a-out"></div>
+  </section>
+
+  <!-- MY HEROES -->
+  <section id="tab-roster" class="hidden">
+    <div class="card">
+      <h2>Add a hero you own</h2>
+      <p class="muted">The Analyze tab picks your best team from these heroes. Entering the same hero again updates its power. Powers you enter when logging a fight are saved here too.</p>
+      <div class="row">
+        <div><label>Hero</label><input id="r-hero" list="heroes"></div>
+        <div><label>Power</label><input id="r-power" type="number" min="0"></div>
+      </div>
+      <div class="actions"><button class="btn" id="r-add">Add / update</button></div>
+      <p id="r-msg" class="muted"></p>
+    </div>
+    <div class="card">
+      <h2>My heroes</h2>
+      <div class="tablewrap" id="r-out"></div>
+    </div>
+  </section>
+
+  <!-- LOG -->
+  <section id="tab-log" class="hidden">
+    <div class="card">
+      <h2>Record a fight</h2>
+      <div class="teams">
+        <div class="team" id="l-mine" data-label="My team" data-mine="1"></div>
+        <div class="team" id="l-enemy" data-label="Enemy team"></div>
+      </div>
+      <div class="row">
+        <div><label>Mode</label><select id="l-mode"><option>Arena</option><option>Grand Arena</option><option>Guild War</option><option>Other</option></select></div>
+      </div>
+      <div class="actions">
+        <button class="btn win" data-result="win">Save as WIN</button>
+        <button class="btn loss" data-result="loss">Save as LOSS</button>
+      </div>
+      <p id="l-msg" class="muted"></p>
+    </div>
+  </section>
+
+  <!-- HISTORY -->
+  <section id="tab-history" class="hidden">
+    <div class="card"><h2>Battle history</h2><div class="tablewrap" id="h-out"></div></div>
+  </section>
+
+  <!-- HERO STATS -->
+  <section id="tab-heroes" class="hidden">
+    <div class="card">
+      <h2>Enemy heroes that give you trouble</h2>
+      <p class="muted">Your win rate when this hero is on the enemy team (min. 2 fights).</p>
+      <div class="tablewrap" id="s-enemy"></div>
+    </div>
+    <div class="card">
+      <h2>Your heroes</h2>
+      <p class="muted">Your win rate when you bring this hero, and the last power you entered for it.</p>
+      <div class="tablewrap" id="s-mine"></div>
+    </div>
+  </section>
+
+  <!-- COUNTERS -->
+  <section id="tab-counters" class="hidden">
+    <div class="card">
+      <h2>Add a counter rule</h2>
+      <p class="muted">"Counter hero" beats "Target hero". Hard = strong counter (counts like 3 fights), Normal = 2, Soft = 1.</p>
+      <div class="row">
+        <div><label>Counter hero</label><input id="c-counter" list="heroes"></div>
+        <div><label>Target hero</label><input id="c-target" list="heroes"></div>
+        <div><label>Strength</label><select id="c-strength"><option value="h">Hard</option><option value="n" selected>Normal</option><option value="s">Soft</option></select></div>
+        <div><label>Note (optional)</label><input id="c-note"></div>
+      </div>
+      <div class="actions"><button class="btn" id="c-add">Add rule</button></div>
+      <p id="c-msg" class="muted"></p>
+    </div>
+    <div class="card">
+      <h2>Counter rules</h2>
+      <p class="muted">Built-in rules come from the <a href="https://www.allclash.com/hero-wars-counters-best-counter-hero-to-each-hero/" target="_blank" rel="noopener">AllClash counter list</a> (October 2026). They are a guide writer's opinion, not measured win rates, and may be outdated after balance patches. Delete or edit any you disagree with.</p>
+      <input id="c-filter" placeholder="Filter by hero name…">
+      <div class="tablewrap" id="c-out"></div>
+      <div class="actions"><button class="btn ghost" id="c-reset">Reset to built-in rules</button></div>
+    </div>
+  </section>
+
+  <!-- HERO LIST -->
+  <section id="tab-list" class="hidden">
+    <div class="card">
+      <h2>Hero list (drop-down)</h2>
+      <p class="muted">One hero per line. Add new heroes when the game releases them, or fix any name that is wrong. Heroes from your logged fights are always included too.</p>
+      <textarea id="hl-text" spellcheck="false"></textarea>
+      <div class="actions">
+        <button class="btn" id="hl-save">Save list</button>
+        <button class="btn ghost" id="hl-reset">Reset to built-in list</button>
+      </div>
+      <p id="hl-msg" class="muted"></p>
+    </div>
+  </section>
+
+  <!-- DATA -->
+  <section id="tab-data" class="hidden">
+    <div class="card">
+      <h2>Backup &amp; restore</h2>
+      <p class="muted">Data is stored in this browser. Export regularly so you don't lose it if browser data is cleared.</p>
+      <div class="actions">
+        <button class="btn" id="d-export">Export JSON</button>
+        <label class="btn ghost">Import JSON<input type="file" id="d-import" accept=".json" hidden></label>
+        <button class="btn ghost" id="d-wipe">Delete all data</button>
+      </div>
+      <p id="d-msg" class="muted"></p>
+    </div>
+  </section>
+</main>
+
+<datalist id="heroes"></datalist>
+
+<script>
+const STORE_KEY = 'arenaAnalyzer.v1';
+const HEROES_KEY = 'arenaAnalyzer.heroes';
+const POWERS_KEY = 'arenaAnalyzer.myPowers';
+// Starter list, not guaranteed complete. Users can edit it in the "Hero list" tab.
+const SEED_HEROES = ['Aidan','Alvanor','Amira','Andvari','Arachne','Artemis','Astaroth','Astrid and Lucas','Augustus','Aurora','Byrna','Celeste','Chabba','Cleaver','Cornelius','Corvus','Crow','Dante','Daredevil','Dark Star','Dorian','Drayne','Electra','Elmir','Eva','Faceless','Fafnir','Folio','Fox','Galahad','Ginger','Guus','Heidi','Helios','Iris','Isaac','Ishmael','Jet','Jhu','Jorgen','Judge','Julius','K\'arkh','Kai','Kayla','Keira','Kendle','Krista','Lara Croft','Lars','Leonel','Lian','Lilith','Luther','Lyria','Markus','Martha','Maya','Miu','Mojo','Moloch','Morrigan','Mushy and Shroom','Nebula','Ninja Turtles','Octavia','Orion','Oya','Peach','Peppy','Phobos','Polaris','Qing Mao','Rufus','Satori','Sebastian','Soleil','Somna','Tempus','Thea','Tristan','Xe\'Sha','Yasmine','Ziri'];
+
+// "Counter>Target|strength|note". Strength: h = hard, n = normal, s = soft (source labels every counter hard or soft).
+// Source: https://www.allclash.com/hero-wars-counters-best-counter-hero-to-each-hero/ (October 22, 2026)
+// An optional 4th field overrides the source (used for Leonel/Eva/Kendle rules from other guides).
+// Krista & Lars are split into two rows. Bump SEED_VERSION whenever the built-in lists change.
+const COUNTER_SOURCE = 'AllClash, Oct 2026';
+const SEED_VERSION = 3;
+const SEED_COUNTERS = `
+Martha>Aidan|s|Backline option against shared-health Aidan
+Jorgen>Aidan|s|Energy stealing controls Kayla-linked setup
+Satori>Alvanor|s|Gains energy from his shields
+Celeste>Alvanor|s|Blocks his healing
+Jorgen>Amira|h|Blocks her charging, delays ultimate
+Phobos>Amira|s|High magic defense
+Maya>Amira|s|High magic defense
+Markus>Amira|s|High magic defense
+Thea>Amira|s|High magic defense
+Peppy>Amira|s|High magic defense
+Cornelius>Amira|s|High magic defense
+Andvari>Arachne|h|Removes her stun
+Sebastian>Arachne|h|Removes her stun
+Nebula>Arachne|h|Removes her stun
+Celeste>Arachne|s|Blocks her healing
+Jorgen>Artemis|s|No easy hard counter exists
+Faceless>Artemis|s|No easy hard counter exists
+Amira>Artemis|s|No easy hard counter exists
+Helios>Artemis|s|No easy hard counter exists
+Celeste>Astaroth|h|Denies his resurrection
+Morrigan>Astaroth|s|Nullifies his abilities (needs high-damage team)
+Sebastian>Augustus|h|Removes his magic damage reduction
+Isaac>Augustus|s|Counters the mages he is paired with
+Chabba>Aurora|h|Takes her out of the fight
+Isaac>Aurora|s|Silence
+Corvus>Aurora|s|Reflects her effect back to her team
+Rufus>Aurora|s|Survives non-physical attacks
+Cornelius>Celeste|h|One-shots intelligence heroes
+Dorian>Cleaver|h|Team healing offsets his skill
+Andvari>Cleaver|s|Shields allies against his skill
+Krista>Cornelius|h|Blocks his ultimate (Twins)
+Lars>Cornelius|h|Blocks his ultimate (Twins)
+Dorian>Corvus|h|Vampiric Aura nullifies totem damage
+Somna>Crow|h|Sheep before he acts
+Lian>Crow|s|Charm
+Electra>Crow|s|Relic grants control immunity
+Helios>Daredevil|s|Counter damage on her crits
+Corvus>Daredevil|s|Altar damages her
+Celeste>Dorian|h|Blocks his healing, converts to magic damage
+Jorgen>Dorian|s|Redirects damage to focus him
+Astrid and Lucas>Electra|s|Control and energy denial
+Arachne>Electra|s|Control and energy denial
+Keira>Elmir|s|Area damage hits his clones
+Ziri>Elmir|s|Tank option
+Cleaver>Eva|h|Hard counter
+Jorgen>Eva|s|Targets the furthest enemy
+Corvus>Eva|s|Pulls her from the backline
+Kayla>Eva|s|Area damage
+Rufus>Faceless|s|Large anti-magic shield
+Yasmine>Fafnir|h|Stops backline support
+Soleil>Folio|h|Hard counter
+Kayla>Folio|s|Takes him down early
+Jorgen>Galahad|h|Shuts down his ultimates
+Polaris>Guus|s|Stun composition
+Lara Croft>Guus|s|Stun composition
+Amira>Guus|s|Drains energy
+Jorgen>Guus|s|Drains energy
+Satori>Heidi|h|Hard counter
+Cleaver>Helios|s|Attacks backline directly
+Rufus>Iris|s|Tank (disputed by readers)
+Orion>Iris|s|Orion + Nebula setup
+Nebula>Iris|s|Orion + Nebula setup
+Dante>Iris|s|Dante shred setup
+Celeste>Ishmael|h|Blocks his healing, converts to magic damage
+Helios>Ishmael|s|Counter damage on his crits
+Helios>Jet|s|Counter damage on her crits
+Martha>Jhu|s|High HP, area healing
+Satori>Jorgen|h|Marks him, one-shots when he gains energy
+Phobos>Judge|s|Ults often, magic defense
+Maya>Judge|s|Magic defense
+Markus>Judge|s|Magic defense
+Thea>Judge|s|Magic defense
+Peppy>Judge|s|Magic defense
+Cornelius>Judge|s|Magic defense
+Jorgen>Julius|s|Burst while his shield is down
+Amira>Julius|s|Fatal damage (RNG-dependent)
+Satori>K'arkh|h|Marks him, one-shots when he gains energy
+Andvari>K'arkh|s|Shields team
+Jorgen>K'arkh|s|Drains energy
+Rufus>Kai|h|Immune to magic damage
+Somna>Kayla|h|Hardest counter
+Morrigan>Kayla|s|Counters her resurrection
+Corvus>Kayla|s|Undead setup
+Lian>Keira|h|Charms her when she damages Lian
+Phobos>Kendle|h|Paralyzes, drains energy
+Cornelius>Kendle|h|Targets high-intelligence heroes
+Jorgen>Kendle|s|Drains energy
+Helios>Kendle|s|Soft counter
+Andvari>Krista|h|Denies Lars' active skill (Twins)
+Andvari>Lars|h|Denies Lars' active skill (Twins)
+Satori>Krista|h|Marks and one-shots on energy gain (Twins)
+Satori>Lars|h|Marks and one-shots on energy gain (Twins)
+Cleaver>Krista|s|Attacks backline directly (Twins)
+Cleaver>Lars|s|Attacks backline directly (Twins)
+Dorian>Krista|s|Vampiric Aura sustains team (Twins)
+Dorian>Lars|s|Vampiric Aura sustains team (Twins)
+Helios>Lara Croft|h|Punishes her crits
+Amira>Lara Croft|s|Makes her crits miss
+Helios>Leonel|h|Punishes his crits
+Amira>Leonel|h|Reduces enemy crit chance
+Corvus>Leonel|s|Strikes back
+Lian>Leonel|s|Charm
+Sebastian>Lian|s|Removes charms
+Nebula>Lian|s|Removes charms
+Qing Mao>Lilith|h|Percentage damage to remaining HP
+Faceless>Luther|h|Pulls him to the frontline
+Celeste>Markus|s|Soft counter
+Celeste>Martha|h|Blocks her healing, converts to magic damage
+Cleaver>Martha|s|Attacks backline directly
+Luther>Martha|s|Jumps to backline
+K'arkh>Maya|s|Burst damage
+Jorgen>Miu|h|Drains energy, blocks ultimate
+Nebula>Miu|h|Cleanses blindness
+Cornelius>Miu|h|Massive damage to her
+Lian>Miu|s|Charm
+Iris>Miu|s|Fast damage
+Satori>Miu|s|Fast damage
+Amira>Mushy and Shroom|s|Burst damage
+Yasmine>Mushy and Shroom|s|Burst damage
+Sebastian>Nebula|h|Blocks her ultimate
+Helios>Ninja Turtles|h|Counters their control
+Iris>Ninja Turtles|s|Gets shredded often
+Satori>Octavia|h|Fox Fire marks disable her kit
+Keira>Octavia|s|Area damage bypasses Imperial Guard
+Ginger>Octavia|s|Area damage bypasses Imperial Guard
+Krista>Octavia|s|Area damage bypasses Imperial Guard (Twins)
+Lars>Octavia|s|Area damage bypasses Imperial Guard (Twins)
+Satori>Orion|h|One-shots him when he gains energy
+Jorgen>Orion|s|Drains energy
+Iris>Oya|h|Punishes Oya team setups
+Iris>Peach|h|Punishes negative effects
+Somna>Peach|h|Strong crowd control
+Lian>Peach|s|Disruption
+Tempus>Peach|s|Pressure on her team
+Sebastian>Peach|s|Team protection
+Jhu>Peppy|s|Effective, he often stands last
+Jorgen>Peppy|s|Damage redirect focuses him
+Corvus>Phobos|h|Altar slowly kills him
+Nebula>Polaris|h|Removes debuffs
+Orion>Polaris|s|Alternative counter
+Polaris>Polaris|s|Her targeting counters enemy Polaris
+Chabba>Qing Mao|s|Eats her tank
+Morrigan>Rufus|s|Resurrection counter
+Cornelius>Satori|h|One-shots intelligence heroes
+Nebula>Satori|s|Alternative counter
+Celeste>Satori|s|Alternative counter
+Phobos>Sebastian|h|One-shots him with ultimate
+Helios>Sebastian|s|Counters his crit synergy
+Soleil>Somna|h|Punishes control-heavy heroes
+Iris>Somna|s|Scales with debuffs
+Iris>Tempus|h|Counters buffs
+Cleaver>Thea|s|Attacks backline directly
+Satori>Tristan|s|Blows up energy-gaining heroes
+Cornelius>Xe'Sha|s|Huge damage
+Markus>Xe'Sha|s|High magic defense
+Maya>Xe'Sha|s|High magic defense
+Peppy>Xe'Sha|s|High magic defense
+Phobos>Xe'Sha|s|High magic defense
+Thea>Xe'Sha|s|High magic defense
+Isaac>Xe'Sha|s|Mobile version only
+Celeste>Yasmine|h|Purifies allies, removes poison
+Helios>Yasmine|h|Counter damage on her crits
+Krista>Ziri|s|Magic or pure damage (Twins)
+Lars>Ziri|s|Magic or pure damage (Twins)
+Kai>Ziri|s|Magic or pure damage
+Peppy>Ziri|s|Magic or pure damage
+Leonel>Julius|h|Predator Jump crushes shield-heavy defenders|AlexandreGames
+Leonel>Crow|s|Leonel team beat Crow lineups in testing|AlexandreGames
+Leonel>Aidan|s|Listed as an Aidan counter|OMG.ROCKS
+Leonel>Alvanor|s|Inferred: Predator Jump punishes shielded heroes|AlexandreGames
+Leonel>Andvari|s|Inferred: Predator Jump punishes shielded heroes|AlexandreGames
+Eva>Julius|s|Impossible Shot helps remove Julius|Hero Wars Olympus
+Eva>Electra|s|Removing Electra strips her team's protection|Hero Wars Olympus
+Kendle>Eva|s|Pure damage bypasses her defenses (worth testing)|Hero Wars Olympus
+Kendle>Amira|s|Listed as an Amira counter|OMG.ROCKS
+Kendle>Astaroth|s|Listed as an Astaroth counter|OMG.ROCKS
+`.trim().split('\n').map((line, i) => {
+  const [pair, strength, note, src] = line.split('|');
+  const [counter, target] = pair.split('>');
+  return { id: 'b' + i, counter, target, strength, note, src: src || COUNTER_SOURCE };
+});
+const STRENGTH = { h: 3, n: 2, s: 1 };
+const STRENGTH_LABEL = { h: 'Hard', n: 'Normal', s: 'Soft' };
+
+function loadJSON(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+}
+function saveJSON(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+}
+
+let battles = loadJSON(STORE_KEY, []);
+let heroList = loadJSON(HEROES_KEY, null) || SEED_HEROES.slice();
+let myPowers = loadJSON(POWERS_KEY, {}); // your roster: normalized hero -> power (edited in My heroes, updated by logged fights)
+const saveRoster = () => saveJSON(POWERS_KEY, myPowers);
+const COUNTERS_KEY = 'arenaAnalyzer.counters';
+let counters = loadJSON(COUNTERS_KEY, null) || SEED_COUNTERS.slice();
+const saveCounters = () => saveJSON(COUNTERS_KEY, counters);
+// Saved data overrides the built-in lists, so after an update swap in the new built-in rules
+// and add new heroes, keeping rules and heroes you added yourself.
+const SEED_VERSION_KEY = 'arenaAnalyzer.seedVersion';
+if (loadJSON(SEED_VERSION_KEY, 1) < SEED_VERSION) {
+  const mine = counters.filter(c => !String(c.id).startsWith('b'));
+  const mineKeys = new Set(mine.map(c => c.counter.trim().toLowerCase() + '>' + c.target.trim().toLowerCase()));
+  counters = SEED_COUNTERS.filter(c => !mineKeys.has(c.counter.toLowerCase() + '>' + c.target.toLowerCase())).concat(mine);
+  const have = new Set(heroList.map(h => h.trim().toLowerCase()));
+  heroList = heroList.concat(SEED_HEROES.filter(h => !have.has(h.toLowerCase())));
+  saveCounters();
+  saveJSON(HEROES_KEY, heroList);
+  saveJSON(SEED_VERSION_KEY, SEED_VERSION);
+}
+const save = () => saveJSON(STORE_KEY, battles);
+
+const norm = s => s.trim().replace(/\s+/g, ' ').toLowerCase();
+const display = new Map(); // normalized -> display name
+function nameOf(k) { return display.get(k) || k; }
+function registerName(n) { const k = norm(n); if (k && !display.has(k)) display.set(k, n.trim()); return k; }
+function rebuildNames() {
+  display.clear();
+  heroList.forEach(registerName);
+  counters.forEach(c => { registerName(c.counter); registerName(c.target); });
+  battles.forEach(b => { b.myNames?.forEach(registerName); b.enNames?.forEach(registerName); });
+  Object.keys(myPowers).forEach(registerName);
+  refreshDatalist();
+}
+function refreshDatalist() {
+  document.getElementById('heroes').innerHTML =
+    [...display.values()].sort((a, b) => a.localeCompare(b)).map(n => `<option value="${esc(n)}">`).join('');
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+const fmt = n => Number(n).toLocaleString();
+
+// ---------- team inputs: 5 slots of (hero, power) + auto total ----------
+function buildTeam(el) {
+  const label = document.createElement('label');
+  label.textContent = el.dataset.label;
+  el.appendChild(label);
+  for (let i = 0; i < 5; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'slot';
+    slot.innerHTML = `<input class="hero" list="heroes" placeholder="Hero ${i + 1}"><input class="power" type="number" min="0" placeholder="Power">`;
+    el.appendChild(slot);
+  }
+  const total = document.createElement('div');
+  total.className = 'total';
+  el.appendChild(total);
+  el.addEventListener('input', () => updateTotal(el));
+  if (el.dataset.mine) {
+    // Fill in the power you last used for your own hero
+    el.addEventListener('change', e => {
+      if (!e.target.classList.contains('hero')) return;
+      const p = e.target.nextElementSibling;
+      const last = myPowers[norm(e.target.value)];
+      if (!p.value && last) { p.value = last; updateTotal(el); }
+    });
+  }
+  updateTotal(el);
+}
+function readSlots(id) {
+  return [...document.querySelectorAll(`#${id} .slot`)]
+    .map(s => ({ name: s.querySelector('.hero').value.trim(), power: +s.querySelector('.power').value || 0 }))
+    .filter(s => s.name);
+}
+// Team power is only valid when every chosen hero has a power entered
+function teamPower(slots) {
+  if (!slots.length || slots.some(s => !s.power)) return 0;
+  return slots.reduce((a, s) => a + s.power, 0);
+}
+function updateTotal(el) {
+  const slots = readSlots(el.id);
+  const sum = slots.reduce((a, s) => a + s.power, 0);
+  const missing = slots.filter(s => !s.power).length;
+  el.querySelector('.total').innerHTML = `Team power: ${fmt(sum)}` +
+    (missing ? ` <small>(${missing} hero${missing > 1 ? 'es' : ''} without power, so power is not used)</small>` : '');
+}
+function writeSlots(id, slots) {
+  document.querySelectorAll(`#${id} .slot`).forEach((s, i) => {
+    s.querySelector('.hero').value = slots[i]?.name || '';
+    s.querySelector('.power').value = slots[i]?.power || '';
+  });
+  updateTotal(document.getElementById(id));
+}
+document.querySelectorAll('.team').forEach(buildTeam);
+rebuildNames();
+
+// ---------- prediction ----------
+const overlap = (a, b) => a.filter(x => b.includes(x)).length;
+const sameTeam = (a, b) => a.length === b.length && overlap(a, b) === a.length;
+const smooth = (w, n) => (w + 1) / (n + 2);
+
+function predict(my, en, myPow, enPow) {
+  const parts = [];
+  let ew = 0, en_ = 0;                          // 1. exact same matchup
+  let sw = 0, sn = 0;                           // 2. similar matchups (>=3 shared heroes each side)
+  let pairSum = 0, pairWeight = 0;              // 3. hero-vs-hero records
+
+  for (const b of battles) {
+    const win = b.result === 'win' ? 1 : 0;
+    if (sameTeam(b.my, my) && sameTeam(b.en, en)) { ew += win; en_++; continue; }
+    const om = overlap(b.my, my), oe = overlap(b.en, en);
+    if (om >= 3 && oe >= 3) {
+      const wt = (om * oe) / 25;
+      sw += win * wt; sn += wt;
+    }
+  }
+  for (const h of my) for (const e of en) {
+    let w = 0, n = 0;
+    for (const b of battles) if (b.my.includes(h) && b.en.includes(e)) { n++; w += b.result === 'win' ? 1 : 0; }
+    if (n) { pairSum += smooth(w, n) * n; pairWeight += n; }
+  }
+
+  if (en_) parts.push({ label: `Exact same matchup: ${ew}W / ${en_ - ew}L`, p: smooth(ew, en_), wt: en_ * 3 });
+  if (sn > 0) parts.push({ label: `Similar matchups (3+ same heroes each side): ${sn.toFixed(1)} weighted fights`, p: smooth(sw, sn), wt: sn * 1.5 });
+  if (pairWeight) parts.push({ label: `Your heroes vs their heroes: ${pairWeight} hero pairings`, p: pairSum / pairWeight, wt: Math.min(pairWeight / 5, 5) });
+  if (myPow > 0 && enPow > 0) {
+    const ratio = myPow / enPow;
+    parts.push({ label: `Power ${fmt(myPow)} vs ${fmt(enPow)} (ratio ${ratio.toFixed(2)})`, p: 1 / (1 + Math.exp(-8 * (ratio - 1))), wt: 2 });
+  }
+
+  // 4. Guide counter rules: each matching rule counts as 1-3 virtual wins or losses
+  const rules = matchCounters(my, en);
+  if (rules.length) {
+    let gw = 0, gn = 0;
+    rules.forEach(r => { const v = STRENGTH[r.strength] || 2; gn += v; if (r.good) gw += v; });
+    parts.push({ label: `Guide counter rules: ${rules.length} matched`, p: smooth(gw, gn), wt: Math.min(gn / 2, 4) });
+  }
+
+  let num = 0.5, den = 1; // starting point: 50%, counted as 1 "fight"
+  parts.forEach(x => { num += x.p * x.wt; den += x.wt; });
+  const evidence = den - 1;
+  const confidence = evidence >= 8 ? 'High' : evidence >= 3 ? 'Medium' : evidence > 0 ? 'Low' : 'No data';
+  return { p: num / den, parts, confidence, rules };
+}
+
+// Rules where one of my heroes counters one of theirs (good) or the reverse (bad)
+function matchCounters(my, en) {
+  const out = [];
+  for (const c of counters) {
+    const ck = norm(c.counter), tk = norm(c.target);
+    if (my.includes(ck) && en.includes(tk)) out.push({ ...c, good: true });
+    else if (en.includes(ck) && my.includes(tk)) out.push({ ...c, good: false });
+  }
+  return out;
+}
+
+function color(p) { return p >= 0.6 ? 'var(--win)' : p <= 0.4 ? 'var(--loss)' : 'var(--mid)'; }
+function pct(p) { return Math.round(p * 100) + '%'; }
+function teamStr(keys) { return keys.map(nameOf).join(', '); }
+
+function analyze() {
+  const enSlots = readSlots('a-enemy'), mySlots = readSlots('a-mine');
+  const out = document.getElementById('a-out');
+  if (!enSlots.length) { out.innerHTML = `<div class="card muted">Enter at least one enemy hero.</div>`; return; }
+  const en = enSlots.map(s => registerName(s.name)), my = mySlots.map(s => registerName(s.name));
+  refreshDatalist();
+
+  let html = '';
+  if (my.length) {
+    const r = predict(my, en, teamPower(mySlots), teamPower(enSlots));
+    const formula = `(0.5 × 1${r.parts.map(x => ` + ${pct(x.p)} × ${x.wt.toFixed(1)}`).join('')}) ÷ (1${r.parts.map(x => ` + ${x.wt.toFixed(1)}`).join('')}) = ${pct(r.p)}`;
+    html += `<div class="card"><h2>Predicted win chance</h2>
+      <div class="big" style="color:${color(r.p)}">${pct(r.p)}</div>
+      <div class="meter"><span style="width:${r.p * 100}%;background:${color(r.p)}"></span></div>
+      <p>Confidence: <span class="pill">${r.confidence}</span></p>
+      <h2>How this was calculated</h2>
+      <div class="tablewrap"><table><tr><th>Signal</th><th>Win chance from this signal</th><th>Weight</th></tr>
+        <tr><td>Starting point (no information)</td><td>50%</td><td>1.0</td></tr>
+        ${r.parts.map(x => `<tr><td>${esc(x.label)}</td><td style="color:${color(x.p)}">${pct(x.p)}</td><td>${x.wt.toFixed(1)}</td></tr>`).join('')}
+      </table></div>
+      <p class="formula">${formula}</p>
+      ${r.parts.length ? '' : `<p class="muted">No logged fights or counter rules involve these heroes and powers are incomplete, so this is just the 50% starting point.</p>`}
+      ${r.rules.length ? `<h2>Counter rules that apply</h2><table>${r.rules.map(c =>
+        `<tr><td class="${c.good ? 'w' : 'l'}">${c.good ? '✓ Your' : '✗ Their'} ${esc(c.counter)} counters ${c.good ? 'their' : 'your'} ${esc(c.target)}</td><td>${STRENGTH_LABEL[c.strength] || ''}</td><td class="muted">${esc(c.note || '')}</td></tr>`).join('')}</table>` : ''}
+    </div>`;
+  }
+
+  html += suggestionCard(en, teamPower(enSlots));
+
+  // Heroes the guide rules say beat this enemy team
+  const picks = new Map();
+  counters.forEach(c => {
+    const tk = norm(c.target), ck = norm(c.counter);
+    if (!en.includes(tk) || en.includes(ck)) return;
+    const p = picks.get(ck) || { score: 0, beats: [] };
+    p.score += STRENGTH[c.strength] || 2;
+    p.beats.push(`${c.target} (${STRENGTH_LABEL[c.strength] || ''})`);
+    picks.set(ck, p);
+  });
+  const topPicks = [...picks].sort((a, b) => b[1].score - a[1].score).slice(0, 10);
+  html += `<div class="card"><h2>Heroes that counter this enemy (guide rules)</h2>${
+    topPicks.length ? `<div class="tablewrap"><table><tr><th>Hero</th><th>Counters</th><th>Score</th></tr>${topPicks.map(([h, p]) =>
+      `<tr><td>${esc(nameOf(h))}${myPowers[h] ? ` <span class="pill">yours · ${fmt(myPowers[h])}</span>` : ''}</td><td>${esc(p.beats.join(', '))}</td><td>${p.score}</td></tr>`).join('')}</table></div>`
+    : `<p class="muted">No counter rules for these enemy heroes. You can add some in the Counters tab.</p>`}</div>`;
+
+  // Rank teams you have used before against this enemy
+  const seen = new Map();
+  battles.forEach(b => { const k = [...b.my].sort().join('|'); if (!seen.has(k)) seen.set(k, b.my); });
+  const ranked = [...seen.values()]
+    .map(t => ({ t, r: predict(t, en, 0, 0) }))
+    .filter(x => x.r.parts.length)
+    .sort((a, b) => b.r.p - a.r.p)
+    .slice(0, 8);
+  html += `<div class="card"><h2>Your best logged teams vs this enemy</h2>${
+    ranked.length ? `<p class="muted">Based on fight history only (power not included).</p><div class="tablewrap"><table><tr><th>My team</th><th>Win chance</th><th>Confidence</th></tr>${ranked.map(x =>
+      `<tr><td>${esc(teamStr(x.t))}</td><td style="color:${color(x.r.p)};font-weight:600">${pct(x.r.p)}</td><td><span class="pill">${x.r.confidence}</span></td></tr>`).join('')}</table></div>`
+    : `<p class="muted">Not enough history against these heroes yet.</p>`}</div>`;
+
+  out.innerHTML = html;
+}
+
+// ---------- best team from My heroes ----------
+// How much one of my heroes helps against this enemy: counter rules plus hero-vs-hero history
+function heroScore(h, en) {
+  let s = 0;
+  for (const c of counters) {
+    const ck = norm(c.counter), tk = norm(c.target), v = STRENGTH[c.strength] || 2;
+    if (ck === h && en.includes(tk)) s += v;
+    else if (tk === h && en.includes(ck)) s -= v;
+  }
+  for (const e of en) {
+    let w = 0, n = 0;
+    for (const b of battles) if (b.my.includes(h) && b.en.includes(e)) { n++; w += b.result === 'win' ? 1 : 0; }
+    if (n) s += (smooth(w, n) - 0.5) * Math.min(n, 5);
+  }
+  return s;
+}
+function combos(arr, k, start = 0, cur = [], out = []) {
+  if (cur.length === k) { out.push(cur.slice()); return out; }
+  for (let i = start; i <= arr.length - (k - cur.length); i++) { cur.push(arr[i]); combos(arr, k, i + 1, cur, out); cur.pop(); }
+  return out;
+}
+// Shortlist up to 14 heroes (best counters + strongest), then score every 5-hero team with predict()
+function suggestTeams(en, enPow) {
+  const pool = Object.entries(myPowers).filter(([, p]) => p > 0)
+    .map(([h, power]) => ({ h, power, score: heroScore(h, en) }));
+  if (!pool.length) return [];
+  const byScore = [...pool].sort((a, b) => b.score - a.score || b.power - a.power).slice(0, 8);
+  const byPower = [...pool].sort((a, b) => b.power - a.power).slice(0, 8);
+  const shortlist = [...new Set([...byScore, ...byPower])].slice(0, 14);
+  return combos(shortlist, Math.min(5, shortlist.length))
+    .map(team => {
+      const keys = team.map(x => x.h), power = team.reduce((a, x) => a + x.power, 0);
+      return { keys, power, r: predict(keys, en, power, enPow) };
+    })
+    .sort((a, b) => b.r.p - a.r.p || b.power - a.power)
+    .slice(0, 5);
+}
+let lastSuggestions = [];
+function suggestionCard(en, enPow) {
+  if (!Object.keys(myPowers).length)
+    return `<div class="card"><h2>Suggested teams from My heroes</h2><p class="muted">Add the heroes you own and their power in the My heroes tab to get team suggestions.</p></div>`;
+  lastSuggestions = suggestTeams(en, enPow);
+  return `<div class="card"><h2>Suggested teams from My heroes</h2>
+    <p class="muted">Ranked by predicted win chance (fight history, counter rules${enPow ? ', and power vs enemy power' : ''}). ${enPow ? '' : 'Enter every enemy hero\'s power to include power in the ranking. '}Line-up positions (front/back) are not checked.</p>
+    <div class="tablewrap"><table><tr><th>Team</th><th>Power</th><th>Win chance</th><th>Counters</th><th></th></tr>${lastSuggestions.map((s, i) => {
+      const rules = matchCounters(s.keys, en);
+      const good = rules.filter(c => c.good).map(c => `${c.counter} > ${c.target}`), bad = rules.filter(c => !c.good).map(c => `${c.counter} > ${c.target}`);
+      return `<tr><td>${s.keys.map(k => `${esc(nameOf(k))} <span class="muted">${fmt(myPowers[k])}</span>`).join('<br>')}</td>
+        <td>${fmt(s.power)}</td>
+        <td style="color:${color(s.r.p)};font-weight:600">${pct(s.r.p)} <span class="pill">${s.r.confidence}</span></td>
+        <td>${good.length ? `<span class="w">✓ ${esc(good.join(', '))}</span>` : ''}${good.length && bad.length ? '<br>' : ''}${bad.length ? `<span class="l">✗ ${esc(bad.join(', '))}</span>` : ''}${!good.length && !bad.length ? '<span class="muted">–</span>' : ''}</td>
+        <td><button class="btn ghost" data-use="${i}">Use</button></td></tr>`;
+    }).join('')}</table></div></div>`;
+}
+
+// ---------- my heroes ----------
+function renderRoster() {
+  const rows = Object.entries(myPowers).sort((a, b) => b[1] - a[1]);
+  document.getElementById('r-out').innerHTML = rows.length
+    ? `<p class="muted">${rows.length} heroes · top 5 power ${fmt(rows.slice(0, 5).reduce((a, [, p]) => a + p, 0))}</p>
+      <table><tr><th>Hero</th><th>Power</th><th></th></tr>${rows.map(([h, p]) =>
+      `<tr><td>${esc(nameOf(h))}</td><td><input type="number" min="0" value="${p}" data-rpow="${esc(h)}"></td><td><button class="x" data-rdel="${esc(h)}" title="Remove">×</button></td></tr>`).join('')}</table>`
+    : '<p class="muted">No heroes yet. Add the heroes you own above.</p>';
+}
+
+// ---------- log ----------
+function logBattle(result) {
+  const mySlots = readSlots('l-mine'), enSlots = readSlots('l-enemy');
+  const msg = document.getElementById('l-msg');
+  if (!mySlots.length || !enSlots.length) { msg.textContent = 'Fill in at least one hero on each side.'; return; }
+  battles.push({
+    id: Date.now(),
+    date: new Date().toISOString(),
+    mode: document.getElementById('l-mode').value,
+    my: mySlots.map(s => registerName(s.name)), en: enSlots.map(s => registerName(s.name)),
+    myNames: mySlots.map(s => s.name), enNames: enSlots.map(s => s.name),
+    myPowers: mySlots.map(s => s.power || null), enPowers: enSlots.map(s => s.power || null),
+    myPow: teamPower(mySlots) || null, enPow: teamPower(enSlots) || null,
+    result
+  });
+  mySlots.forEach(s => { if (s.power) myPowers[norm(s.name)] = s.power; });
+  save(); saveJSON(POWERS_KEY, myPowers); refreshDatalist();
+  writeSlots('l-enemy', []);
+  msg.textContent = `Saved ${result.toUpperCase()}. ${battles.length} fights logged. Your team is kept for the next entry.`;
+}
+
+// ---------- history & stats ----------
+function renderHistory() {
+  const el = document.getElementById('h-out');
+  if (!battles.length) { el.innerHTML = '<p class="muted">No battles yet.</p>'; return; }
+  const wins = battles.filter(b => b.result === 'win').length;
+  el.innerHTML = `<p>${battles.length} fights · overall win rate <b>${pct(wins / battles.length)}</b></p>
+  <table><tr><th>Date</th><th>Mode</th><th>My team</th><th>Enemy</th><th>Power (me / enemy)</th><th>Result</th><th></th></tr>
+  ${[...battles].reverse().map(b => `<tr>
+    <td>${new Date(b.date).toLocaleDateString()}</td><td>${esc(b.mode || '')}</td>
+    <td>${esc(teamStr(b.my))}</td><td>${esc(teamStr(b.en))}</td>
+    <td class="muted">${b.myPow ? fmt(b.myPow) : '–'} / ${b.enPow ? fmt(b.enPow) : '–'}</td>
+    <td class="${b.result === 'win' ? 'w' : 'l'}">${b.result.toUpperCase()}</td>
+    <td><button class="x" data-del="${b.id}" title="Delete">×</button></td></tr>`).join('')}</table>`;
+}
+
+function heroTable(side, minN, showPower) {
+  const stats = new Map();
+  battles.forEach(b => b[side].forEach(h => {
+    const s = stats.get(h) || { w: 0, n: 0 };
+    s.n++; if (b.result === 'win') s.w++;
+    stats.set(h, s);
+  }));
+  const rows = [...stats].filter(([, s]) => s.n >= minN).sort((a, b) => a[1].w / a[1].n - b[1].w / b[1].n);
+  if (!rows.length) return '<p class="muted">Not enough data yet.</p>';
+  return `<table><tr><th>Hero</th><th>Fights</th><th>Your win rate</th>${showPower ? '<th>Last power</th>' : ''}</tr>${rows.map(([h, s]) =>
+    `<tr><td>${esc(nameOf(h))}</td><td>${s.n}</td><td style="color:${color(s.w / s.n)};font-weight:600">${pct(s.w / s.n)}</td>${showPower ? `<td>${myPowers[h] ? fmt(myPowers[h]) : '–'}</td>` : ''}</tr>`).join('')}</table>`;
+}
+function renderStats() {
+  document.getElementById('s-enemy').innerHTML = heroTable('en', 2, false);
+  document.getElementById('s-mine').innerHTML = heroTable('my', 1, true);
+}
+
+// ---------- wiring ----------
+document.querySelectorAll('nav button').forEach(btn => btn.onclick = () => {
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b === btn));
+  document.querySelectorAll('main > section').forEach(s => s.classList.toggle('hidden', s.id !== 'tab-' + btn.dataset.tab));
+  if (btn.dataset.tab === 'history') renderHistory();
+  if (btn.dataset.tab === 'heroes') renderStats();
+  if (btn.dataset.tab === 'list') document.getElementById('hl-text').value = heroList.join('\n');
+  if (btn.dataset.tab === 'counters') renderCounters();
+  if (btn.dataset.tab === 'roster') renderRoster();
+});
+
+document.getElementById('r-add').onclick = () => {
+  const name = document.getElementById('r-hero').value.trim(), power = +document.getElementById('r-power').value || 0;
+  const msg = document.getElementById('r-msg');
+  if (!name || !power) { msg.textContent = 'Enter a hero and its power.'; return; }
+  myPowers[registerName(name)] = power;
+  saveRoster(); refreshDatalist();
+  document.getElementById('r-hero').value = ''; document.getElementById('r-power').value = '';
+  document.getElementById('r-hero').focus();
+  msg.textContent = `Saved ${name}: ${fmt(power)}.`;
+  renderRoster();
+};
+document.getElementById('r-power').onkeydown = e => { if (e.key === 'Enter') document.getElementById('r-add').click(); };
+document.getElementById('r-out').onchange = e => {
+  const h = e.target.dataset.rpow;
+  if (h && +e.target.value > 0) { myPowers[h] = +e.target.value; saveRoster(); }
+};
+document.getElementById('r-out').onclick = e => {
+  const h = e.target.dataset.rdel;
+  if (h) { delete myPowers[h]; saveRoster(); renderRoster(); }
+};
+document.getElementById('a-out').onclick = e => {
+  const s = lastSuggestions[e.target.dataset.use];
+  if (!s) return;
+  writeSlots('a-mine', s.keys.map(k => ({ name: nameOf(k), power: myPowers[k] })));
+  analyze();
+};
+// Suggest as soon as an enemy hero is picked
+document.getElementById('a-enemy').addEventListener('change', () => { if (readSlots('a-enemy').length) analyze(); });
+
+function renderCounters() {
+  const f = norm(document.getElementById('c-filter').value);
+  const rows = counters.filter(c => !f || norm(c.counter).includes(f) || norm(c.target).includes(f))
+    .sort((a, b) => a.target.localeCompare(b.target) || a.counter.localeCompare(b.counter));
+  document.getElementById('c-out').innerHTML = `<p class="muted">${rows.length} of ${counters.length} rules</p>
+    <table><tr><th>Counter hero</th><th>Beats</th><th>Strength</th><th>Note</th><th>Source</th><th></th></tr>${rows.map(c =>
+    `<tr><td>${esc(c.counter)}</td><td>${esc(c.target)}</td><td>${STRENGTH_LABEL[c.strength] || ''}</td><td class="muted">${esc(c.note || '')}</td><td class="muted">${esc(c.src || '')}</td><td><button class="x" data-cdel="${esc(c.id)}" title="Delete">×</button></td></tr>`).join('')}</table>`;
+}
+document.getElementById('c-filter').oninput = renderCounters;
+document.getElementById('c-out').onclick = e => {
+  const id = e.target.dataset.cdel;
+  if (id) { counters = counters.filter(c => c.id !== id); saveCounters(); renderCounters(); }
+};
+document.getElementById('c-add').onclick = () => {
+  const counter = document.getElementById('c-counter').value.trim(), target = document.getElementById('c-target').value.trim();
+  const msg = document.getElementById('c-msg');
+  if (!counter || !target) { msg.textContent = 'Enter both heroes.'; return; }
+  // Replace an existing rule for the same pair rather than duplicating it
+  counters = counters.filter(c => !(norm(c.counter) === norm(counter) && norm(c.target) === norm(target)));
+  counters.push({ id: 'u' + Date.now(), counter, target, strength: document.getElementById('c-strength').value, note: document.getElementById('c-note').value.trim(), src: 'You' });
+  saveCounters(); registerName(counter); registerName(target); refreshDatalist();
+  ['c-counter', 'c-target', 'c-note'].forEach(id => document.getElementById(id).value = '');
+  msg.textContent = `Saved: ${counter} counters ${target}.`;
+  renderCounters();
+};
+document.getElementById('c-reset').onclick = () => {
+  if (!confirm('Replace all counter rules (including ones you added) with the built-in list?')) return;
+  counters = SEED_COUNTERS.slice();
+  try { localStorage.removeItem(COUNTERS_KEY); } catch {}
+  rebuildNames(); renderCounters();
+};
+document.getElementById('a-run').onclick = analyze;
+document.getElementById('a-clear').onclick = () => { writeSlots('a-enemy', []); writeSlots('a-mine', []); document.getElementById('a-out').innerHTML = ''; };
+document.getElementById('a-tolog').onclick = () => {
+  writeSlots('l-enemy', readSlots('a-enemy'));
+  writeSlots('l-mine', readSlots('a-mine'));
+  document.querySelector('nav button[data-tab="log"]').click();
+};
+document.querySelectorAll('[data-result]').forEach(b => b.onclick = () => logBattle(b.dataset.result));
+document.getElementById('h-out').onclick = e => {
+  const id = e.target.dataset.del;
+  if (id && confirm('Delete this battle?')) { battles = battles.filter(b => String(b.id) !== id); save(); renderHistory(); }
+};
+document.getElementById('hl-save').onclick = () => {
+  const seen = new Set();
+  heroList = document.getElementById('hl-text').value.split('\n').map(s => s.trim())
+    .filter(s => s && !seen.has(norm(s)) && seen.add(norm(s)));
+  saveJSON(HEROES_KEY, heroList); rebuildNames();
+  document.getElementById('hl-text').value = heroList.join('\n');
+  document.getElementById('hl-msg').textContent = `Saved ${heroList.length} heroes.`;
+};
+document.getElementById('hl-reset').onclick = () => {
+  if (!confirm('Replace your hero list with the built-in one?')) return;
+  heroList = SEED_HEROES.slice();
+  try { localStorage.removeItem(HEROES_KEY); } catch {}
+  rebuildNames();
+  document.getElementById('hl-text').value = heroList.join('\n');
+  document.getElementById('hl-msg').textContent = 'Reset to built-in list.';
+};
+document.getElementById('d-export').onclick = () => {
+  const blob = new Blob([JSON.stringify({ battles, heroList, myPowers, counters }, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `arena-battles-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+};
+document.getElementById('d-import').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    const incoming = Array.isArray(data) ? data : data.battles; // older backups were a plain array
+    if (!Array.isArray(incoming)) throw new Error();
+    const ids = new Set(battles.map(b => b.id));
+    const added = incoming.filter(b => b && b.my && b.en && b.result && !ids.has(b.id));
+    battles.push(...added);
+    if (Array.isArray(data.heroList)) { heroList = data.heroList; saveJSON(HEROES_KEY, heroList); }
+    if (Array.isArray(data.counters)) { counters = data.counters; saveCounters(); }
+    if (data.myPowers) { myPowers = { ...data.myPowers, ...myPowers }; saveJSON(POWERS_KEY, myPowers); }
+    save(); rebuildNames();
+    document.getElementById('d-msg').textContent = `Imported ${added.length} new fights.`;
+  } catch { document.getElementById('d-msg').textContent = 'That file is not a valid backup.'; }
+  e.target.value = '';
+};
+document.getElementById('d-wipe').onclick = () => {
+  if (confirm('Delete ALL logged battles? Export first if you want a backup.')) {
+    battles = []; save(); rebuildNames(); // My heroes are kept
+    document.getElementById('d-msg').textContent = 'All battles deleted. My heroes were kept.';
+  }
+};
+</script>
+</body>
+</html>

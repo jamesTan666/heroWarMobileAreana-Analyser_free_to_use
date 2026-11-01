@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14112a">
+<title>Arena Battle Simulator</title>
+<style>
+:root{
+  --bg:#14112a; --panel:#1f1a3d; --panel2:#2a2452; --line:#3a3270; --text:#f1eeff; --muted:#a59fd0;
+  --atk:#4fa3ff; --def:#ff5b6e; --gold:#ffc94a; --hp:#3ddc72; --en:#4fc3ff; --sh:#e8e8ff;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+body{min-height:100vh;padding-bottom:70px}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+.wrap{max-width:560px;margin:0 auto;padding:0 12px}
+header.top{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#1d1840,#14112a);border-bottom:1px solid var(--line)}
+header.top h1{margin:0;padding:10px 0 4px;font-size:18px;letter-spacing:.5px;text-align:center}
+header.top h1 span{color:var(--gold)}
+nav.tabs{display:flex;gap:4px;padding:6px 0 8px}
+nav.tabs button{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 0;font-weight:600;color:var(--muted)}
+nav.tabs button.on{background:var(--gold);color:#241a00;border-color:var(--gold)}
+section.tab{display:none;padding-top:12px}
+section.tab.on{display:block}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px}
+.card h2{margin:0 0 8px;font-size:15px;display:flex;align-items:center;gap:8px}
+.card h2 .pw{margin-left:auto;font-size:12px;color:var(--gold);font-weight:600}
+.side-a h2{color:var(--atk)} .side-b h2{color:var(--def)}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.btn{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-weight:600}
+.btn.pri{background:var(--gold);border-color:var(--gold);color:#241a00}
+.btn.sm{padding:5px 9px;font-size:12px}
+.btn:disabled{opacity:.4}
+select,input[type=number]{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:5px 6px}
+.slot{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-left:4px solid var(--rc,#666);border-radius:10px;padding:6px;margin-bottom:6px;width:100%}
+.slot.empty{justify-content:center;color:var(--muted);border-style:dashed;border-left-width:1px;min-height:52px;background:transparent}
+.s-ico{width:40px;height:40px;border-radius:10px;border:none;background:#0004;font-size:22px;flex:none}
+.s-main{flex:1;min-width:0}
+.s-name{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.role{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--rc);font-weight:700;margin-left:4px}
+.s-ctl{display:flex;gap:6px;margin-top:3px;font-size:12px;color:var(--muted);align-items:center}
+.s-ctl input{width:58px}
+.ibtn{background:none;border:none;font-size:17px;padding:6px;color:var(--muted)}
+.modal{position:fixed;inset:0;background:#000a;z-index:50;display:none;align-items:flex-end;justify-content:center}
+.modal.on{display:flex}
+.sheet{background:var(--panel);width:100%;max-width:560px;max-height:85vh;overflow:auto;border-radius:18px 18px 0 0;padding:14px;border:1px solid var(--line)}
+.sheet header{display:flex;align-items:center;margin-bottom:10px}
+.sheet header h3{margin:0;flex:1;font-size:16px}
+.chips{display:flex;gap:5px;overflow-x:auto;padding-bottom:8px}
+.chips button{flex:none;background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:5px 11px;font-size:12px;color:var(--muted)}
+.chips button.on{background:var(--text);color:var(--bg)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}
+.hb{background:var(--panel2);border:1px solid var(--line);border-bottom:3px solid var(--rc);border-radius:12px;padding:8px 4px;text-align:center}
+.hb .i{font-size:26px;display:block}
+.hb .n{font-size:12px;font-weight:700;display:block}
+.hb .r{font-size:9px;text-transform:uppercase;color:var(--rc);font-weight:700}
+.hb:disabled{opacity:.3}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.form label{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
+.form input,.form select{width:100%}
+input[type=text],input[type=search]{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+.search{width:100%;margin-bottom:8px}
+.skill{background:var(--panel2);border-radius:10px;padding:8px;margin-top:8px;font-size:12px}
+.skill b{color:var(--gold)}
+.skill .tag{font-size:10px;color:var(--muted);margin-left:4px}
+.skill .sim{color:var(--muted);font-size:11px;margin-top:4px}
+details.muted{margin-top:6px} details.muted summary{cursor:pointer}
+.unit.summon{border-style:dashed;opacity:.9}
+/* battle */
+.hud{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.timer{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+.vs{font-weight:800;font-size:13px}
+.vs .a{color:var(--atk)} .vs .b{color:var(--def)}
+.field{display:grid;grid-template-columns:1fr 1fr;gap:8px;position:relative}
+.col{display:flex;flex-direction:column;gap:6px}
+.unit{position:relative;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:6px 7px;transition:transform .15s,opacity .4s}
+.colA .unit{border-left:3px solid var(--atk)}
+.colB .unit{border-right:3px solid var(--def);text-align:right}
+.unit.dead{opacity:.28;filter:grayscale(1)}
+.unit.cast{transform:scale(1.05);box-shadow:0 0 0 2px var(--gold)}
+.unit.hit{animation:shake .2s}
+@keyframes shake{25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+.u-top{display:flex;gap:5px;align-items:center;font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden}
+.colB .u-top{flex-direction:row-reverse}
+.u-ico{font-size:18px}
+.u-st{font-size:11px;margin-left:auto}
+.colB .u-st{margin-left:0;margin-right:auto}
+.bar{height:7px;background:#0006;border-radius:4px;margin-top:4px;position:relative;overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;background:var(--hp);border-radius:4px;transition:width .1s}
+.bar.en{height:4px}
+.bar.en i{background:var(--en)}
+.bar.en.full i{background:var(--gold)}
+.bar b{position:absolute;inset:0 auto 0 0;background:var(--sh);opacity:.75;border-radius:4px}
+.u-hp{font-size:10px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+.fl{position:absolute;left:50%;top:10px;font-weight:800;font-size:13px;pointer-events:none;animation:fl 1s ease-out forwards;text-shadow:0 1px 2px #000;white-space:nowrap;z-index:5}
+.fl.d{color:#ff6b6b} .fl.c{color:var(--gold);font-size:16px} .fl.h{color:var(--hp)} .fl.s{color:#fff;font-size:11px} .fl.k{color:var(--gold);font-size:12px}
+@keyframes fl{from{transform:translate(-50%,0);opacity:1}to{transform:translate(-50%,-34px);opacity:0}}
+.banner{display:none;text-align:center;padding:12px;border-radius:12px;margin:10px 0;font-weight:800;font-size:18px}
+.banner.on{display:block}
+.banner.win{background:#1f4d33;color:#7dffae}
+.banner.lose{background:#4d1f29;color:#ff9aa8}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{background:var(--panel2);border:none;padding:7px 10px;font-weight:700;font-size:12px;color:var(--muted)}
+.seg button.on{background:var(--text);color:var(--bg)}
+.log{max-height:220px;overflow:auto;font-size:11px;font-family:ui-monospace,Consolas,monospace;background:#0004;border-radius:10px;padding:8px}
+.log div{padding:1px 0}
+.log .A{color:#9ccbff} .log .B{color:#ffa3ae} .log .sys{color:var(--gold)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{padding:5px 4px;text-align:right;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:600}
+tr.A td:first-child{color:var(--atk)} tr.B td:first-child{color:var(--def)}
+.wbar{display:flex;height:28px;border-radius:10px;overflow:hidden;font-weight:800;font-size:13px;margin:8px 0}
+.wbar div{display:flex;align-items:center;justify-content:center;min-width:0;transition:width .3s}
+.wbar .a{background:var(--atk);color:#04213f} .wbar .b{background:var(--def);color:#3f0410}
+.prog{height:6px;background:#0006;border-radius:3px;overflow:hidden;margin:8px 0}
+.prog i{display:block;height:100%;width:0;background:var(--gold)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}
+.stats div{background:var(--panel2);border-radius:10px;padding:8px;text-align:center}
+.stats b{display:block;font-size:17px}
+.stats span{font-size:11px;color:var(--muted)}
+.muted{color:var(--muted);font-size:12px}
+.hrow{display:flex;gap:10px;align-items:flex-start}
+.hrow .i{font-size:28px}
+.kv{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11px;color:var(--muted);margin-top:3px}
+.kv b{color:var(--text)}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <h1>⚔ Arena <span>Battle Simulator</span></h1>
+  <nav class="tabs">
+    <button data-tab="teams" class="on">Teams</button>
+    <button data-tab="battle">Battle</button>
+    <button data-tab="sim">Simulate</button>
+    <button data-tab="heroes">Heroes</button>
+  </nav>
+</div></header>
+
+<main class="wrap">
+  <!-- TEAMS -->
+  <section class="tab on" id="tab-teams">
+    <div class="card side-a"><h2>🗡 Attack team <span class="pw" id="pwA"></span></h2><div id="teamA"></div>
+      <div class="row"><button class="btn sm" data-team="A" data-do="random">🎲 Random</button><button class="btn sm" data-team="A" data-do="clear">Clear</button><select class="preset" data-team="A"></select></div>
+    </div>
+    <div class="row" style="justify-content:center;margin:-4px 0 8px"><button class="btn sm" id="swap">⇅ Swap teams</button></div>
+    <div class="card side-b"><h2>🛡 Defense team <span class="pw" id="pwB"></span></h2><div id="teamB"></div>
+      <div class="row"><button class="btn sm" data-team="B" data-do="random">🎲 Random</button><button class="btn sm" data-team="B" data-do="clear">Clear</button><select class="preset" data-team="B"></select></div>
+    </div>
+    <div class="card"><h2>💾 Saved matchups</h2>
+      <div class="row"><select id="savedSel" style="flex:1;min-width:120px"></select><button class="btn sm" id="loadSaved">Load</button><button class="btn sm" id="delSaved">Delete</button><button class="btn sm pri" id="saveCur">Save current</button></div>
+      <p class="muted">Saved in this browser only. Works fully offline.</p>
+    </div>
+  </section>
+
+  <!-- BATTLE -->
+  <section class="tab" id="tab-battle">
+    <div class="card">
+      <div class="hud"><div class="vs"><span class="a">ATTACK</span> vs <span class="b">DEFENSE</span></div><div class="timer" id="timer">1:30</div></div>
+      <div class="field"><div class="col colA" id="colA"></div><div class="col colB" id="colB"></div></div>
+      <div class="banner" id="banner"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn pri" id="bStart">▶ Fight</button>
+        <button class="btn" id="bPause" disabled>⏸</button>
+        <button class="btn" id="bSkip" disabled>⏭ Skip</button>
+        <div class="seg" id="speed" style="margin-left:auto"><button data-s="1" class="on">1×</button><button data-s="2">2×</button><button data-s="4">4×</button></div>
+      </div>
+      <div class="row muted" style="margin-top:10px">
+        <label>Time limit <select id="limit"><option value="60">1:00</option><option value="90">1:30</option><option value="120">2:00</option><option value="180">3:00</option></select></label>
+        <label><input type="checkbox" id="toDef"> Timeout = defender wins</label>
+        <label title="A hero listed as a counter deals extra damage to the hero it counters, and takes less from it">Counter rules <select id="counter"><option value="0">Off</option><option value="15">Light</option><option value="30">Normal</option><option value="50">Strong</option></select></label>
+        <label title="Real heroes differ in gear, artifacts, skins and glyphs. Each battle rolls every hero's damage and toughness within this range. Heroes with stats you typed in are not changed.">Power spread <select id="spread"><option value="0">Off</option><option value="10">±10%</option><option value="20">±20%</option><option value="30">±30%</option></select></label>
+      </div>
+    </div>
+    <div class="card" id="dmgCard" style="display:none"><h2>📊 Battle stats</h2><div id="dmgTable"></div></div>
+    <div class="card"><h2>📜 Battle log</h2><div class="log" id="log"></div></div>
+  </section>
+
+  <!-- SIM -->
+  <section class="tab" id="tab-sim">
+    <div class="card"><h2>🎲 Monte-Carlo simulation</h2>
+      <p class="muted">Runs the current matchup many times (crits, dodges and targeting are random) and reports the attacker's win rate.</p>
+      <div class="row"><label>Battles <select id="simN"><option>100</option><option selected>1000</option><option>5000</option><option>20000</option></select></label><button class="btn pri" id="simRun">Run simulation</button></div>
+      <div class="prog"><i id="simProg"></i></div>
+      <div id="simOut"></div>
+    </div>
+  </section>
+
+  <!-- HEROES -->
+  <section class="tab" id="tab-heroes">
+    <div class="row" style="margin-bottom:8px"><input type="search" id="heroSearch" class="search" placeholder="Search heroes…" style="flex:1;margin:0"><button class="btn pri" id="newHero">＋ Custom hero</button></div>
+    <div class="chips" id="heroChips"></div>
+    <div id="heroList"></div>
+  </section>
+</main>
+
+<div class="modal" id="picker"><div class="sheet">
+  <header><h3>Choose a hero</h3><button class="ibtn" data-close>✕</button></header>
+  <input type="search" id="pickSearch" class="search" placeholder="Search heroes…">
+  <div class="chips" id="pickChips"></div>
+  <div class="grid" id="pickGrid"></div>
+</div></div>
+
+<div class="modal" id="editor"><div class="sheet">
+  <header><h3 id="edTitle">Edit</h3><button class="ibtn" data-close>✕</button></header>
+  <p class="muted">Override stats for this slot (leave blank = auto from level &amp; stars).</p>
+  <div class="form" id="edForm"></div>
+  <div id="edSkills"></div>
+  <div class="row" style="margin-top:12px"><button class="btn" id="edReset">Reset to auto</button><button class="btn pri" id="edSave" style="margin-left:auto">Save</button></div>
+</div></div>
+
+<div class="modal" id="creator"><div class="sheet">
+  <header><h3 id="crTitle">Custom hero</h3><button class="ibtn" data-close>✕</button></header>
+  <p class="muted">Add any hero that's missing. Stats are at Lv120 / 6★; level and stars scale them in teams.</p>
+  <div class="form">
+    <label>Name<input type="text" id="crName" maxlength="24"></label>
+    <label>Icon (emoji)<input type="text" id="crIcon" maxlength="4" value="🦸"></label>
+    <label>Role<select id="crRole"></select></label>
+    <label>Position (1 = front, 99 = back)<input type="number" id="crPos" min="1" max="99" value="50"></label>
+    <label style="grid-column:1/-1">Skills (copy from hero)<select id="crCopy"></select></label>
+  </div>
+  <div class="form" id="crStats" style="margin-top:8px"></div>
+  <div id="crSkills"></div>
+  <div class="row" style="margin-top:12px"><button class="btn" id="crDel">Delete</button><button class="btn pri" id="crSave" style="margin-left:auto">Save hero</button></div>
+</div></div>
+
+<script>
+/*BUNDLE*/
+</script>
+</body>
+</html>
